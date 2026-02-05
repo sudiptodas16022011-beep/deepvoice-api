@@ -4,14 +4,13 @@ import base64
 import os
 import uuid
 
-# Import only the new accurate function from utils
+# Corrected Import: Matches the new function name in utils.py
 from app.utils import detect_voice_authenticity
 
 app = FastAPI(title="DeepVoice Guard API")
 
 # --- Security Configuration ---
 API_KEY_NAME = "x-api-key"
-# This must match what you submitted to the GUVI portal
 VALID_API_KEY = "sk_test_123456789" 
 
 class AudioRequest(BaseModel):
@@ -30,23 +29,25 @@ def read_root():
 
 @app.post("/api/voice-detection")
 async def voice_detection(request: AudioRequest, api_key: str = Depends(verify_api_key)):
+    # Generate a unique temporary filename for this specific request
     temp_filename = f"temp_{uuid.uuid4()}.mp3"
     
     try:
-        # 1. Clean the Base64 string (remove data headers if present)
+        # 1. Sanitize the Base64 string
         b64_str = request.audio_base64
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
 
-        # 2. Decode and save to a temporary file
+        # 2. Decode and save to a temporary file for analysis
         audio_data = base64.b64decode(b64_str)
         with open(temp_filename, "wb") as f:
             f.write(audio_data)
 
-        # 3. Call the highly accurate detection engine from utils.py
+        # 3. Call the updated, high-accuracy detection engine
+        # This replaces the old decode_base64_audio function
         classification, score, explanation = detect_voice_authenticity(temp_filename)
 
-        # 4. Return the official response format
+        # 4. Return the standard JSON response
         return {
             "classification": classification,
             "confidence_score": score,
@@ -58,13 +59,15 @@ async def voice_detection(request: AudioRequest, api_key: str = Depends(verify_a
         }
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Audio processing failed: {str(e)}")
+        # Catch errors and provide detail to help with debugging
+        raise HTTPException(status_code=400, detail=f"Processing error: {str(e)}")
 
     finally:
-        # 5. Always clean up the temporary file to save Render disk space
+        # 5. Clean up: Delete the temporary file to keep the server storage clean
         if os.path.exists(temp_filename):
             os.remove(temp_filename)
 
 if __name__ == "__main__":
     import uvicorn
+    # Render uses port 10000 by default
     uvicorn.run(app, host="0.0.0.0", port=10000)
