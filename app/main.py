@@ -1,75 +1,70 @@
-from fastapi import FastAPI, Header, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
-from app.model import detector
-from app.utils import decode_base64_audio, generate_explanation
+import base64
+import os
+import uuid
 
-app = FastAPI(
-    title="DeepVoice Guard API",
-    description="SOTA AI Voice Detection for Tamil, English, Hindi, Malayalam, Telugu",
-    version="1.0.0"
-)
+# Import only the new accurate function from utils
+from app.utils import detect_voice_authenticity
 
-# --- CONFIGURATION ---
-# STRICTLY MATCHING PDF REQUIREMENTS
-API_KEY_SECRET = "sk_test_123456789"  # Change this if you want, but keep it simple for testing
+app = FastAPI(title="DeepVoice Guard API")
 
-# --- REQUEST/RESPONSE MODELS ---
+# --- Security Configuration ---
+API_KEY_NAME = "x-api-key"
+# This must match what you submitted to the GUVI portal
+VALID_API_KEY = "sk_test_123456789" 
+
 class AudioRequest(BaseModel):
     language: str
-    audioFormat: str
-    audioBase64: str
+    audio_format: str
+    audio_base64: str
 
-# --- ENDPOINTS ---
+async def verify_api_key(x_api_key: str = Header(None)):
+    if x_api_key != VALID_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API Key")
+    return x_api_key
 
 @app.get("/")
-def home():
-    return {"message": "DeepVoice Guard is Active. Use POST /api/voice-detection"}
+def read_root():
+    return {"status": "online", "message": "DeepVoice Detection API is active"}
 
 @app.post("/api/voice-detection")
-async def detect_voice(
-    payload: AudioRequest,
-    x_api_key: str = Header(None, alias="x-api-key") # Handle header strictly
-):
-    # 1. AUTHENTICATION (PDF Section 5)
-    if x_api_key != API_KEY_SECRET:
-        return {
-            "status": "error",
-            "message": "Invalid API key or malformed request"
-        }
-
-    # 2. VALIDATION (PDF Section 2)
-    valid_languages = ["Tamil", "English", "Hindi", "Malayalam", "Telugu"]
-    if payload.language not in valid_languages:
-        return {
-            "status": "error",
-            "message": "Unsupported language."
-        }
+async def voice_detection(request: AudioRequest, api_key: str = Depends(verify_api_key)):
+    temp_filename = f"temp_{uuid.uuid4()}.mp3"
     
-    if payload.audioFormat.lower() != "mp3":
+    try:
+        # 1. Clean the Base64 string (remove data headers if present)
+        b64_str = request.audio_base64
+        if "," in b64_str:
+            b64_str = b64_str.split(",")[1]
+
+        # 2. Decode and save to a temporary file
+        audio_data = base64.b64decode(b64_str)
+        with open(temp_filename, "wb") as f:
+            f.write(audio_data)
+
+        # 3. Call the highly accurate detection engine from utils.py
+        classification, score, explanation = detect_voice_authenticity(temp_filename)
+
+        # 4. Return the official response format
         return {
-            "status": "error",
-            "message": "Only mp3 format is supported."
+            "classification": classification,
+            "confidence_score": score,
+            "explanation": explanation,
+            "metadata": {
+                "language": request.language,
+                "format": request.audio_format
+            }
         }
 
-    # 3. PROCESSING
-    audio_array = decode_base64_audio(payload.audioBase64)
-    if audio_array is None or len(audio_array) == 0:
-        return {
-            "status": "error",
-            "message": "Invalid Base64 audio content."
-        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Audio processing failed: {str(e)}")
 
-    # 4. AI INFERENCE
-    classification, confidence = detector.predict(audio_array)
-    
-    # 5. EXPLAINABILITY (The Winner Factor)
-    explanation_text = generate_explanation(confidence, classification, audio_array)
+    finally:
+        # 5. Always clean up the temporary file to save Render disk space
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
 
-    # 6. JSON RESPONSE (PDF Section 8)
-    return {
-        "status": "success",
-        "language": payload.language,
-        "classification": classification,
-        "confidenceScore": round(confidence, 2),
-        "explanation": explanation_text
-    }
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=10000)

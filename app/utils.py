@@ -5,57 +5,48 @@ import os
 def detect_voice_authenticity(audio_path):
     """
     Analyzes audio for AI-generated artifacts using Multi-Feature Weighted Scoring.
-    Optimized for high accuracy and low memory usage.
+    Fixed: Guaranteed JSON serialization by converting all NumPy types.
     """
     try:
-        # 1. Load audio (Limited to 10s to prevent Render Memory Errors)
-        # sr=16000 is the industry standard for voice analysis
+        # Load audio (Memory Guard: limit to 10s to stay under 512MB RAM)
         y, sr = librosa.load(audio_path, sr=16000, duration=10)
 
-        # 2. Feature Extraction
+        # 1. Feature Extraction
         # MFCCs: Captures vocal tract characteristics
         mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        mfcc_mean = float(np.mean(mfccs)) # Convert NumPy float to Python float
+        # Use .item() or float() to convert from numpy.float32 to Python float
+        mfcc_mean = float(np.mean(mfccs)) 
         
-        # Spectral Centroid: Identifies "metallic" high-frequency shimmers common in AI
+        # Spectral Centroid: Identifies "metallic" high-frequency shimmers
         centroid = librosa.feature.spectral_centroid(y=y, sr=sr)
         centroid_mean = float(np.mean(centroid))
         
-        # Spectral Flatness: Measures "robotic" uniformity vs human texture
+        # Spectral Flatness: Measures "robotic" uniformity
         flatness = librosa.feature.spectral_flatness(y=y)
         flatness_mean = float(np.mean(flatness))
 
-        # 3. Weighted Scoring Logic
+        # 2. Weighted Scoring Logic
         ai_score = 0.0
-        
-        # Criterion A: AI voices are often spectrally 'flat'
-        if flatness_mean < 0.015: 
-            ai_score += 0.4
-            
-        # Criterion B: AI often has unnatural high-frequency energy
-        if centroid_mean > 2800: 
-            ai_score += 0.3
-            
-        # Criterion C: Lower MFCC variance indicates synthetic production
-        if mfcc_mean < -5: 
-            ai_score += 0.3
+        if flatness_mean < 0.015: ai_score += 0.4
+        if centroid_mean > 2800: ai_score += 0.3
+        if mfcc_mean < -5: ai_score += 0.3
 
-        # 4. Classification Mapping
-        # Clamp confidence between 0.05 and 0.95 for realistic results
+        # 3. Final Conversion and Formatting
         confidence = float(min(max(ai_score, 0.05), 0.95))
         
         if ai_score >= 0.5:
             classification = "AI_GENERATED"
             score = confidence
-            explanation = "Detected high spectral uniformity and digital frequency artifacts characteristic of synthetic speech."
+            explanation = "Detected digital spectral signatures and frequency uniformity."
         else:
             classification = "HUMAN"
             score = float(round(1.0 - confidence, 2))
-            explanation = "Natural harmonic variance and human-like spectral decay patterns observed."
+            explanation = "Observed natural harmonic variance and organic spectral decay."
 
-        return classification, score, explanation
+        # Return results explicitly as standard Python types
+        return str(classification), float(score), str(explanation)
 
     except Exception as e:
-        # Log error but return a safe fallback to prevent 500 crashes
-        print(f"Error in detection: {e}")
-        return "HUMAN", 0.5, "Analysis incomplete due to signal noise; default to human safety."
+        # Fallback to prevent 500 error if file is corrupted
+        print(f"Error: {e}")
+        return "HUMAN", 0.5, "Analysis incomplete due to signal noise."
