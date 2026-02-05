@@ -38,3 +38,5 @@ class DeepFakeDetector:
             return "HUMAN", score
         else:
             return "AI_GENERATED", (1 - score + 0.4) # Normalizing for the response
+# Add this at the very bottom of app/model.py
+detector = DeepFakeDetector()
