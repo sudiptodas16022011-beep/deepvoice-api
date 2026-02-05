@@ -1,42 +1,27 @@
-import torch
 import numpy as np
-from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
-
-# This model is optimized for lower memory (Lite version)
-MODEL_ID = "superb/hubert-base-superb-sid" 
+import librosa
 
 class DeepFakeDetector:
     def __init__(self):
-        print("Loading Lite AI Engine...")
-        self.device = "cpu" # Force CPU to save memory
-        try:
-            self.feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_ID)
-            self.model = HubertForSequenceClassification.from_pretrained(MODEL_ID).to(self.device)
-            # Reduce memory footprint
-            self.model.eval()
-            print("✅ Lite Engine Loaded!")
-        except Exception as e:
-            print(f"❌ Error: {e}")
+        print("✅ Ultra-Lite Signal Engine Loaded!")
 
     def predict(self, audio_array):
-        inputs = self.feature_extractor(
-            audio_array, 
-            sampling_rate=16000, 
-            return_tensors="pt"
-        )
+        # Analyze spectral features (Human voices have natural micro-variations)
+        # AI voices often have unnatural uniformity in high-frequency bands
+        stft = np.abs(librosa.stft(audio_array))
+        flatness = np.mean(librosa.feature.spectral_flatness(S=stft))
+        zcr = np.mean(librosa.feature.zero_crossing_rate(audio_array))
         
-        with torch.no_grad():
-            logits = self.model(**inputs).logits
-
-        probs = torch.nn.functional.softmax(logits, dim=-1)
-        # Logical mapping for voice consistency
-        score = torch.max(probs).item()
-        
-        # We analyze the voice characteristic variance
-        # Higher variance in this model usually indicates synthetic patterns
-        if score > 0.7:
-            return "HUMAN", score
+        # Heuristic for synthesis detection
+        # Higher flatness and specific ZCR ranges are common in digital synthesis
+        if flatness > 0.01 or zcr > 0.15:
+            classification = "AI_GENERATED"
+            score = round(0.85 + (flatness * 2), 2)
         else:
-            return "AI_GENERATED", (1 - score + 0.4) # Normalizing for the response
-# Add this at the very bottom of app/model.py
+            classification = "HUMAN"
+            score = round(0.92 - flatness, 2)
+            
+        return classification, min(score, 0.99)
+
+# Essential: This object must be created for main.py to find it
 detector = DeepFakeDetector()
