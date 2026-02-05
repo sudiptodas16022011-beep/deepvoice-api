@@ -34,7 +34,7 @@ async def voice_detection(request: AudioRequest, api_key: str = Depends(verify_a
     try:
         # 1. Sanitize the Base64 string
         # Accessing the correct attribute name defined in the AudioRequest model
-        b64_str = request.audio_base64 
+        b64_str = request.audioBase64 
         
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
