@@ -15,7 +15,7 @@ VALID_API_KEY = "sk_test_123456789"
 
 class AudioRequest(BaseModel):
     language: str
-    audioFormat: str
+    audio_format: str
     audioBase64: str  # CHANGED: Standardized to snake_case
 
 async def verify_api_key(x_api_key: str = Header(None, alias="x-api-key")):
