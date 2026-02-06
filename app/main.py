@@ -16,7 +16,7 @@ VALID_API_KEY = "sk_test_123456789"
 class AudioRequest(BaseModel):
     language: str
     audio_format: str
-    audioBase64: str  # CHANGED: Standardized to snake_case
+    audio_base64: str  # CHANGED: Standardized to snake_case
 
 async def verify_api_key(x_api_key: str = Header(None, alias="x-api-key")):
     if x_api_key != VALID_API_KEY:
@@ -34,7 +34,7 @@ async def voice_detection(request: AudioRequest, api_key: str = Depends(verify_a
     try:
         # 1. Sanitize the Base64 string
         # Accessing the correct attribute name defined in the AudioRequest model
-        b64_str = request.audioBase64 
+        b64_str = request.audio_base64 
         
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
