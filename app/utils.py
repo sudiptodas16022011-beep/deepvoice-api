@@ -34,7 +34,7 @@ def detect_voice_authenticity(audio_path):
         # 3. Final Conversion and Formatting
         confidence = float(min(max(ai_score, 0.05), 0.95))
         
-        if ai_score >= 0.5:
+        if ai_score >= 0.2:
             classification = "AI_GENERATED"
             score = confidence
             explanation = "Detected digital spectral signatures and frequency uniformity."
